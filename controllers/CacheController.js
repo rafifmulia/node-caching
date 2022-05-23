@@ -4,13 +4,14 @@ const NodeCache = require('node-cache');
 const CryptoJs = require('crypto-js');
 const Func = require ('../utils/func');
 const Constants = require('../utils/constants');
+const redisClient = require('../library/redisClient');
 
 const mCache = new NodeCache({ checkperiod: Constants.cachePeriodS });
 
-// https://stackoverflow.com/questions/24542959/how-does-a-etag-work-in-expressjs
+const SECRET_KEY = process.env.ETagSKey;
 
 class CacheController {
-  static async interalCache(req, res) {
+  static async internalCache(req, res) {
     const now = new Date().getTime();
     try {
       // try new lib alternative moment
@@ -21,12 +22,12 @@ class CacheController {
       if (ETag) {
         const data = mCache.get(ETag);
         if (data) {
-          return Func.endResJson(res, 304, {
+          return Func.endResJson(res, 200, {
             type: 'sc',
             msg: 'success get resource from cache',
             data,
           }, {
-            ETag,
+            'x-cache-key': ETag,
           });
         }
       }
@@ -35,25 +36,23 @@ class CacheController {
         url: 'https://jsonplaceholder.typicode.com/posts',
         responseType: 'json',
       });
-      const newETag = CryptoJs.SHA256(now).toString(CryptoJs.enc.Hex);
+      const newETag = CryptoJs.SHA256('' + now).toString(CryptoJs.enc.Hex);
       mCache.set(newETag, getPosts.data, Constants.cachePeriodS);
       return Func.endResJson(res, 200, {
         type: 'sc',
         msg: 'success get and cache resource',
         data: getPosts.data,
       }, {
-        ETag: newETag,
+        'x-cache-key': newETag,
       });
     } catch (e) {
       return res.status(500).json({
         type: 'err',
         msg: 'error: ' + e.message,
-        data: getPosts,
       });
     }
   }
-
-  static async clearInteralCache(req, res) {
+  static async clearInternalCache(req, res) {
     const now = new Date().getTime();
     try {
       mCache.flushAll();
@@ -65,7 +64,44 @@ class CacheController {
       return res.status(500).json({
         type: 'err',
         msg: 'error: ' + e.message,
-        data: getPosts,
+      });
+    }
+  }
+
+  static async redisCache(req, res) {
+    const now = new Date().getTime();
+    try {
+      const ETag = req.headers['if-none-match'];
+      if (ETag) {
+        const data = await redisClient.get(ETag);
+        if (data) {
+          return Func.endResJson(res, 200, {
+            type: 'sc',
+            msg: 'success get resource from cache',
+            data: JSON.parse(data),
+          }, {
+            'x-cache-key': ETag,
+          });
+        }
+      }
+      const getPosts = await axios({
+        method: 'GET',
+        url: 'https://disease.sh/v3/covid-19/all',
+        responseType: 'json',
+      });
+      const newETag = CryptoJs.AES.encrypt('' + now, SECRET_KEY).toString();
+      redisClient.set(newETag, JSON.stringify(getPosts.data));
+      return Func.endResJson(res, 200, {
+        type: 'sc',
+        msg: 'success get and cache resource',
+        data: getPosts.data,
+      }, {
+        'x-cache-key': newETag,
+      });
+    } catch (e) {
+      return res.status(500).json({
+        type: 'err',
+        msg: 'error: ' + e.message,
       });
     }
   }

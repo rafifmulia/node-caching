@@ -12,7 +12,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' })); // parsing x-www
 app.use(async (req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'OPTIONS,GET,HEAD,PUT,PATCH,POST,DELETE');
-  res.header('Access-Control-Allow-Headers', 'Accept, Authorization, Content-Type, ETag, Range, X-Requested-With, x-api-key, x-forwarded-for');
+  res.header('Access-Control-Allow-Headers', 'Accept, Authorization, Content-Type, Range, x-api-key, x-cache-key, x-forwarded-for, X-Requested-With');
   next();
 });
 
